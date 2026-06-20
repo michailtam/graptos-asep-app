@@ -12,14 +12,9 @@ By leveraging cloud deployment, this app seamlessly processes an extensive datab
 * **Random Test:** Option to execute a random test.
 
 ## Getting Started
-
-### For local usage
 Ensure you have Python installed on your system. You will also need to install the required dependencies:
 
 ```bash
 pip install streamlit pandas pdfplumber
 python -m streamlit run app.py
 ```
-
-### For mobile usage
-Open your browser with the URL [graptos-asep-app.streamlit.app](https://graptos-asep-app.streamlit.app/)
