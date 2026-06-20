@@ -8,6 +8,8 @@ By leveraging cloud deployment, this app seamlessly processes an extensive datab
 * **Cross-Platform Compatibility:** Runs perfectly in your local environment or on mobile devices (successfully tested on **iPhone 12 Pro**).
 * **Cloud-Powered Performance:** Deployed via Streamlit Cloud to handle heavy data processing (parsing 2,000+ questions) seamlessly, ensuring your mobile device doesn't overheat or slow down.
 **Smart Data Parsing:** Extracts and organizes exam content from complex PDF sources effortlessly.
+**Stopwatch:** Switch button to turn the timer on or off and to set it.
+**Random Test:** Option to execute a random test.
 
 ## Getting Started
 
