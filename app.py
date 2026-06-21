@@ -22,7 +22,7 @@ except Exception as e:
     st.warning("⚠️ Εκκρεμεί η ρύθμιση των Secrets για το Google Sheets στο Cloud. Η εφαρμογή θα λειτουργεί προσωρινά στη μνήμη.")
     conn = None
 
-# Λίστα με τα ακριβή ονόματα των 11 αρχείων PDF σας
+# Λίστα με τα αρχεία PDF
 PDF_FILES = {
     "1. ΣΥΝΤΑΓΜΑΤΙΚΟ ΔΙΚΑΙΟ": "1.ΣΥΝΤΑΓΜΑΤΙΚΟ ΔΙΚΑΙΟ-ΛΥΣΕΙΣ.pdf",
     "2. ΔΙΟΙΚΗΤΙΚΟ ΔΙΚΑΙΟ": "2.ΔΙΟΙΚΗΤΙΚΟ ΔΙΚΑΙΟ-ΛΥΣΕΙΣ.pdf",
@@ -291,28 +291,27 @@ else:
         current_idx = len(questions) - 1
         st.session_state.current_indices[selected_section] = current_idx
 
-    # --- ΔΙΟΡΘΩΣΗ: ΠΡΟΣΘΗΚΗ ΑΠΕΥΘΕΙΑΣ ΜΕΤΑΒΑΣΗΣ ΣΕ ΑΡΙΘΜΟ ΕΡΩΤΗΣΗΣ ---
+    # --- ΣΥΓΧΡΟΝΙΣΜΕΝΗ ΜΕΤΑΒΑΣΗ ΜΕ CALLBACK FUNCTION ---
+    def handle_jump_callback():
+        requested_page = st.session_state[f"jump_input_{selected_section}"]
+        st.session_state.current_indices[selected_section] = requested_page - 1
+        save_progress_to_sheets()
+
     col_title_text, col_jump_input = st.columns([3, 1])
     
     with col_title_text:
         st.markdown(f"### 📍 {selected_section}")
         
     with col_jump_input:
-        # Ο χρήστης βλέπει την ερώτηση ως 1 έως Χ (αντί για 0 έως Χ-1)
-        jump_target = st.number_input(
+        st.number_input(
             "Μετάβαση σε ερώτηση:",
             min_value=1,
             max_value=len(questions),
             value=current_idx + 1,
             step=1,
-            key=f"jump_{selected_section}"
+            key=f"jump_input_{selected_section}",
+            on_change=handle_jump_callback
         )
-        
-        # Αν ο αριθμός που έβαλε ο χρήστης διαφέρει από το τρέχον index, αλλάζουμε ερώτηση
-        if jump_target - 1 != current_idx:
-            st.session_state.current_indices[selected_section] = jump_target - 1
-            save_progress_to_sheets()
-            st.rerun()
 
     current_q = questions[current_idx]
     st.write(f"**Ερώτηση {current_idx + 1} από {len(questions)}**")
@@ -325,6 +324,7 @@ else:
     if current_saved_ans in shuffled_choices:
         default_idx = shuffled_choices.index(current_saved_ans)
         
+    # ΔΙΟΡΘΩΣΗ: Αφαίρεση του st.st.radio
     selected_option = st.radio("Επιλέξτε την ορθή απάντηση:", options=shuffled_choices, index=default_idx, key=f"radio_{selected_section}_{current_q['id']}")
     
     if selected_option and selected_option != current_saved_ans:
@@ -337,7 +337,6 @@ else:
     with col_prev:
         if current_idx > 0:
             if st.button("⬅️  Προηγούμενη", use_container_width=True):
-                st.session_state.user_answers[selected_section][current_q["id"]] = None
                 st.session_state.current_indices[selected_section] -= 1
                 save_progress_to_sheets()
                 st.rerun()
