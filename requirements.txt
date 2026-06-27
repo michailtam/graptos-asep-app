@@ -3,3 +3,4 @@ pandas
 pdfplumber
 streamlit-local-storage
 st-gsheets-connection
+openpyxl
