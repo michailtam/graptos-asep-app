@@ -6,6 +6,7 @@ import random
 import re
 import json
 import time
+import io
 from streamlit_gsheets import GSheetsConnection
 
 # --- ΡΥΘΜΙΣΗ ΣΕΛΙΔΑΣ ---
@@ -182,15 +183,85 @@ def generate_random_test():
         if q["id"] in st.session_state.shuffled_options:
             del st.session_state.shuffled_options[q["id"]]
     if "🎲 ΤΥΧΑΙΟ ΤΕΣΤ (30 ΕΡΩΤΗΣΕΙΣ)" in st.session_state.submitted_sections:
-        st.session_state.submitted_sections.remove("🎲 ΤΥΧΑΙΟ ΤΕΣΤ (30 ΕΡΩΤΗΣΕΙΣ)")
+        st.session_state.submitted_sections.remove("🎲 ΤΥΧΑΙOR ΤΕΣΤ (30 ΕΡΩΤΗΣΕΙΣ)")
     st.session_state.show_preview = False
     st.session_state.timer_start = None  
     save_progress_to_sheets()
+
+# --- ΣΥΝΑΡΤΗΣΗ ΕΛΕΓΧΟΥ: ΥΠΑΡΧΟΥΝ ΛΑΘΗ ΣΤΗ ΜΝΗΜΗ; ---
+def check_if_any_errors_exist():
+    """Επιστρέφει True αν ο χρήστης έχει απαντήσει έστω και μία ερώτηση λάθος."""
+    for sec_name, questions_list in dataset.items():
+        ans_dict = st.session_state.user_answers.get(sec_name, {})
+        for q_item in questions_list:
+            u_ans = ans_dict.get(q_item["id"], None)
+            if u_ans is not None and u_ans != q_item["correct"]:
+                return True
+                
+    random_answers_dict = st.session_state.user_answers.get("🎲 ΤΥΧΑΙΟ ΤΕΣΤ (30 ΕΡΩΤΗΣΕΙΣ)", {})
+    for q_item in st.session_state.random_test_questions:
+        u_ans = random_answers_dict.get(q_item["id"], None)
+        if u_ans is not None and u_ans != q_item["correct"]:
+            return True
+            
+    return False
+
+# --- ΣΥΝΑΡΤΗΣΗ ΔΗΜΙΟΥΡΓΙΑΣ EXCEL ΜΕ ΚΑΡΤΕΛΕΣ ---
+def export_all_errors_to_excel():
+    """Σαρώνει όλες τις απαντήσεις και παράγει ένα Excel με tabs για κάθε ενότητα."""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        for sec_name, questions_list in dataset.items():
+            wrong_data = []
+            for q_item in questions_list:
+                u_ans = st.session_state.user_answers.get(sec_name, {}).get(q_item["id"], None)
+                if u_ans is not None and u_ans != q_item["correct"]:
+                    wrong_data.append({
+                        "Ερώτηση": q_item["question"],
+                        "Η Απάντησή σας": u_ans if u_ans else "❌ Δεν απαντήθηκε",
+                        "Σωστή Απάντηση": q_item["correct"] if q_item["correct"] else "Δεν ανιχνεύθηκε"
+                    })
+            if wrong_data:
+                df = pd.DataFrame(wrong_data)
+                clean_tab_name = re.sub(r'[\\/*?:\[\]]', '', sec_name)[:30]
+                df.to_excel(writer, sheet_name=clean_tab_name, index=False)
+                    
+        random_answers_dict = st.session_state.user_answers.get("🎲 ΤΥΧΑΙΟ ΤΕΣΤ (30 ΕΡΩΤΗΣΕΙΣ)", {})
+        if random_answers_dict:
+            random_wrong = []
+            for q_item in st.session_state.random_test_questions:
+                u_ans = random_answers_dict.get(q_item["id"], None)
+                if u_ans is not None and u_ans != q_item["correct"]:
+                    random_wrong.append({
+                        "Ενότητα Προέλευσης": q_item["section"],
+                        "Ερώτηση": q_item["question"],
+                        "Η Απάντησή σας": u_ans if u_ans else "❌ Δεν απαντήθηκε",
+                        "Σωστή Απάντηση": q_item["correct"]
+                    })
+            if random_wrong:
+                df_rand = pd.DataFrame(random_wrong)
+                df_rand.to_excel(writer, sheet_name="ΤΥΧΑΙΟ ΤΕΣΤ", index=False)
+            
+    return output.getvalue()
+
 
 # --- ΑΡΙΣΤΕΡΟ ΜΕΡΟΣ: Sidebar (Μενού) ---
 st.sidebar.header("📁 Ενότητες")
 selected_section_box = st.sidebar.selectbox("Επιλέξτε Ενότητα για απάντηση:", options=list(dataset.keys()), disabled=(st.session_state.active_mode == "random_test"))
 st.sidebar.markdown("---")
+
+# ΔΥΝΑΜΙΚΗ ΕΜΦΑΝΙΣΗ ΚΟΥΜΠΙΟΥ EXCEL ΜΟΝΟ ΑΝ ΥΠΑΡΧΕΙ ΕΣΤΩ ΚΑΙ ΜΙΑ ΛΑΘΟΣ ΑΠΑΝΤΗΣΗ
+if check_if_any_errors_exist():
+    st.sidebar.subheader("📥 Λήψη Δεδομένων")
+    excel_file_bytes = export_all_errors_to_excel()
+    st.sidebar.download_button(
+        label="📥 Εξαγωγή Λαθών σε Excel",
+        data=excel_file_bytes,
+        file_name="wrong_questions.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        width="stretch"
+    )
+    st.sidebar.markdown("---")
 
 if st.session_state.last_selected_section != selected_section_box:
     st.session_state.timer_start = None
@@ -199,21 +270,21 @@ if st.session_state.last_selected_section != selected_section_box:
 current_active_section = "🎲 ΤΥΧΑΙΟ ΤΕΣΤ (30 ΕΡΩΤΗΣΕΙΣ)" if st.session_state.active_mode == "random_test" else selected_section_box
 
 if st.session_state.active_mode == "regular":
-    if st.sidebar.button("🎲 Έναρξη Τυχαίου Τεστ (30 ερωτήσεις)", use_container_width=True, type="primary"):
+    if st.sidebar.button("🎲 Έναρξη Τυχαίου Τεστ (30 ερωτήσεις)", width="stretch", type="primary"):
         generate_random_test()
         st.session_state.active_mode = "random_test"
         st.rerun()
 else:
-    if st.sidebar.button("🔄 Παραγωγή Νέου Τυχαίου Τεστ", use_container_width=True):
+    if st.sidebar.button("🔄 Παραγωγή Νέου Τυχαίου Τεστ", width="stretch"):
         generate_random_test()
         st.rerun()
-    if st.sidebar.button("⬅️ Επιστροφή στις Ενότητες", use_container_width=True, type="secondary"):
+    if st.sidebar.button("⬅️ Επιστροφή στις Ενότητες", width="stretch", type="secondary"):
         st.session_state.active_mode = "regular"
         st.session_state.show_preview = False
         st.session_state.timer_start = None  
         st.rerun()
 
-if st.sidebar.button("🔄 Έναρξη Τεστ από την Αρχή", use_container_width=True, type="secondary"):
+if st.sidebar.button("🔄 Έναρξη Τεστ από την Αρχή", width="stretch", type="secondary"):
     st.session_state.timer_start = None  
     st.session_state.current_indices[current_active_section] = 0  
     st.session_state.show_preview = False
@@ -244,7 +315,7 @@ with col_timer_duration:
 with col_timer_display:
     if use_timer:
         if st.session_state.timer_start is None:
-            if st.button("⏱️ Έναρξη Χρόνου", use_container_width=True):
+            if st.button("⏱️ Έναρξη Χρόνου", width="stretch"):
                 st.session_state.timer_start = time.time()
                 st.rerun()
         else:
@@ -262,7 +333,7 @@ with col_timer_display:
         st.write("")
 
 with col_stats:
-    show_stats = st.button("📊 Προβολή Στατιστικών", use_container_width=True)
+    show_stats = st.button("📊 Προβολή Στατιστικών", width="stretch")
 
 if show_stats:
     st.markdown("### 📈 Ιστορικό Προσπαθειών")
@@ -270,7 +341,7 @@ if show_stats:
         st.info("Δεν υπάρχουν ακόμη καταγεγραμμένες ολοκληρωμένες προσπάθειες.")
     else:
         df_stats = pd.DataFrame(st.session_state.stats)
-        st.dataframe(df_stats, use_container_width=True, hide_index=True)
+        st.dataframe(df_stats, width="stretch", hide_index=True)
     st.markdown("---")
 
 if st.session_state.active_mode == "random_test":
@@ -324,7 +395,6 @@ else:
     if current_saved_ans in shuffled_choices:
         default_idx = shuffled_choices.index(current_saved_ans)
         
-    # ΔΙΟΡΘΩΣΗ: Αφαίρεση του st.st.radio
     selected_option = st.radio("Επιλέξτε την ορθή απάντηση:", options=shuffled_choices, index=default_idx, key=f"radio_{selected_section}_{current_q['id']}")
     
     if selected_option and selected_option != current_saved_ans:
@@ -336,13 +406,13 @@ else:
     col_prev, col_submit, col_next = st.columns([1, 2, 1])
     with col_prev:
         if current_idx > 0:
-            if st.button("⬅️  Προηγούμενη", use_container_width=True):
+            if st.button("⬅️  Προηγούμενη", width="stretch"):
                 st.session_state.current_indices[selected_section] -= 1
                 save_progress_to_sheets()
                 st.rerun()
     with col_next:
         if current_idx < len(questions) - 1:
-            if st.button("Επόμενη ➡️", use_container_width=True):
+            if st.button("Επόμενη ➡️", width="stretch"):
                 st.session_state.current_indices[selected_section] += 1
                 save_progress_to_sheets()
                 st.rerun()
@@ -353,7 +423,7 @@ else:
         st.markdown("---")
         col_space1, col_preview_btn, col_space2 = st.columns([1, 2, 1])
         with col_preview_btn:
-            if st.button("👁️ Πρόωρη Επισκόπηση Αποτελεσμάτων (Μέχρι Τώρα)", use_container_width=True):
+            if st.button("👁️ Πρόωρη Επισκόπηση Αποτελεσμάτων (Μέχρι Τώρα)", width="stretch"):
                 st.session_state.show_preview = not st.session_state.show_preview
 
         if st.session_state.show_preview:
@@ -369,13 +439,13 @@ else:
                     preview_wrong_data.append({"Ερώτηση": i + 1, "Περιεχόμενο": q_item["question"], "Σωστή Απάντηση": q_item["correct"], "Η Απάντησή σας": u_ans if u_ans else "❌ Δεν απαντήθηκε"})
             st.write(f"Σωστά: **{preview_correct}** | Λάθη/Αναπάντητα: **{(current_idx + 1) - preview_correct}**")
             if preview_wrong_data:
-                st.dataframe(pd.DataFrame(preview_wrong_data), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(preview_wrong_data), width="stretch", hide_index=True)
 
     # --- ΥΠΟΒΟΛΗ ΚΑΙ ΤΕΛΙΚΑ ΑΠΟΤΕΛΕΣΜΑΤΑ ---
     is_last_question = current_idx == len(questions) - 1
     if is_last_question and selected_section not in st.session_state.submitted_sections:
         with col_submit:
-            if st.button("🏁 Ολοκλήρωση & Υποβολή Ενότητας", type="primary", use_container_width=True):
+            if st.button("Ολοκλήρωση & Υποβολή Ενότητας", type="primary", width="stretch"):
                 st.session_state.submitted_sections.add(selected_section)
                 st.session_state.timer_start = None  
                 save_progress_to_sheets()
@@ -384,6 +454,8 @@ else:
     if selected_section in st.session_state.submitted_sections:
         st.markdown("---")
         st.markdown("### 📊 Αποτελέσματα Ενότητας")
+        st.markdown("<br>", unsafe_allow_html=True)
+        
         correct_count = 0
         wrong_questions_data = []
         for q in questions:
@@ -391,7 +463,12 @@ else:
             if user_ans and user_ans == q["correct"]:
                 correct_count += 1
             else:
-                wrong_questions_data.append({"Προέλευση": q["section"], "Ερώτηση": q["question"], "Σωστή Απάντηση": q["correct"] if q["correct"] else "Δεν ανιχνεύθηκε", "Η Απάντησή σας": user_ans if user_ans else "❌ Δεν απαντήθηκε (Λάθος)"})
+                wrong_questions_data.append({
+                    "Προέλευση": q["section"], 
+                    "Ερώτηση": q["question"], 
+                    "Σωστή Απάντηση": q["correct"] if q["correct"] else "Δεν ανιχνεύθηκε", 
+                    "Η Απάντησή σας": user_ans if user_ans else "❌ Δεν απαντήθηκε (Λάθος)"
+                })
         st.success(f"Απαντήσατε σωστά σε **{correct_count}** από τις **{len(questions)}** ερωτήσεις.")
         stats_entry = {"Ενότητα": selected_section, "Σωστά": correct_count, "Σύνολο": len(questions), "Ποσοστό": f"{(correct_count/len(questions))*100:.1f}%"}
         if stats_entry not in st.session_state.stats:
@@ -401,12 +478,11 @@ else:
         if wrong_questions_data:
             st.markdown("#### ❌ Πίνακας Λανθασμένων / Αναπάντητων Ερωτήσεων")
             df_wrong = pd.DataFrame(wrong_questions_data)
-            st.dataframe(df_wrong, use_container_width=True, hide_index=True)
+            st.dataframe(df_wrong, width="stretch", hide_index=True)
         else:
-            st.balloons()
             st.success("🎉 Εξαιρετικά! 100% Επιτυχία!")
             
-        if st.button("🔄 Επανάληψη Ενότητας"):
+        if st.button("🔄 Επανάληψη Ενότητας", width="stretch"):
             st.session_state.submitted_sections.remove(selected_section)
             st.session_state.current_indices[selected_section] = 0
             st.session_state.show_preview = False
