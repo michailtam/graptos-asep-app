@@ -16,6 +16,6 @@ By leveraging cloud deployment, this app seamlessly processes an extensive datab
 Ensure you have Python installed on your system. You will also need to install the required dependencies:
 
 ```bash
-pip install streamlit pandas pdfplumber
+pip install streamlit pandas pdfplumber openpyxl (for online usage: the libraries streamlit-local-storage and st-gsheets-connection are also needed).
 python -m streamlit run app.py
 ```
