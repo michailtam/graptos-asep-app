@@ -10,6 +10,7 @@ By leveraging cloud deployment, this app seamlessly processes an extensive datab
 * **Smart Data Parsing:** Extracts and organizes exam content from complex PDF sources effortlessly.
 * **Stopwatch:** Switch button to turn the timer on or off and to set it.
 * **Random Test:** Option to execute a random test.
+* **Export to Excel** Option to export all wrong answers by section as an excel file.
 
 ## Getting Started
 Ensure you have Python installed on your system. You will also need to install the required dependencies:
